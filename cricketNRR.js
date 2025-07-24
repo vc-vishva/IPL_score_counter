@@ -1,12 +1,11 @@
-// /**
-//  * IPL#!/usr/bin/env node
-
-const readline = require("readline");
+/**
+ * IPL#!/usr/bin/env node
 
 /**
  * IPL 2022 Points Table Data
  * Contains current standings with matches, wins, losses, NRR, runs for/against, and points
  */
+const readline = require("readline");
 const pointsTable = {
   "Chennai Super Kings": {
     matches: 7,
