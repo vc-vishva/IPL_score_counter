@@ -2,7 +2,7 @@
 
 const readline = require("readline");
 
-// Team data from IPL 2022 season
+// IPL 2022 team stats - matches, wins, losses, runs, overs, points
 const pointsTable = {
   "Chennai Super Kings": {
     matches: 7,
@@ -61,19 +61,19 @@ const pointsTable = {
   },
 };
 
-// Convert overs format (128.2 = 128 overs 2 balls)
+// Convert cricket overs format: 128.2 = 128 overs + 2 balls = 128.33 overs
 function displayOversToActualOvers(displayOvers) {
   const wholeOvers = Math.floor(displayOvers);
   const ballsPart = Math.round((displayOvers - wholeOvers) * 10);
-  return wholeOvers + ballsPart / 6;
+  return wholeOvers + ballsPart / 6; // 6 balls per over
 }
 
-// Standard NRR calculation
+// Basic NRR formula: (team run rate) - (opposition run rate)
 function calculateNRR(runsFor, oversFor, runsAgainst, oversAgainst) {
   return runsFor / oversFor - runsAgainst / oversAgainst;
 }
 
-// Calculate dynamic NRR adjustments based on match context
+// Smart NRR calculation with context-based adjustments
 function calculateDynamicNRRAdjustment(
   runsFor,
   oversFor,
@@ -83,112 +83,65 @@ function calculateDynamicNRRAdjustment(
 ) {
   const basicNRR = calculateNRR(runsFor, oversFor, runsAgainst, oversAgainst);
 
-  // Extract context parameters with defaults
+  // Get match details with defaults
   const {
     target = Math.max(runsFor, runsAgainst),
     matchOvers = 20,
     scenario = "standard",
-    teamConsistency = "average", // "high", "average", "low"
+    teamConsistency = "average",
   } = matchContext;
 
-  // Base variance factors
-  let baseVariance = 0.005; // Much smaller base than original arbitrary values
+  // Start with small base variance
+  let baseVariance = 0.005;
 
-  // Adjust variance based on target size
+  // Higher targets = more variance in NRR
   if (target <= 100) {
-    baseVariance *= 0.7; // Smaller targets = less variance
+    baseVariance *= 0.7; // Low targets are more predictable
   } else if (target <= 150) {
     baseVariance *= 1.0; // Standard variance
   } else if (target <= 200) {
-    baseVariance *= 1.3; // Larger targets = more variance
+    baseVariance *= 1.3; // Higher variance
   } else {
-    baseVariance *= 1.6; // Very large targets = highest variance
+    baseVariance *= 1.6; // Very high variance
   }
 
-  // Adjust for match format
+  // Shorter matches = more unpredictable
   if (matchOvers <= 10) {
-    baseVariance *= 1.8; // T10 = high variance
+    baseVariance *= 1.8; // T10 is chaotic
   } else if (matchOvers <= 20) {
-    baseVariance *= 1.0; // T20 = standard
+    baseVariance *= 1.0; // T20 standard
   } else {
-    baseVariance *= 0.6; // Longer formats = lower variance
+    baseVariance *= 0.6; // ODI/Test more stable
   }
 
-  // Adjust for team consistency
+  // Team consistency affects variance
   const consistencyMultiplier = {
-    high: 0.5, // Consistent teams have lower variance
-    average: 1.0, // Standard variance
-    low: 1.5, // Inconsistent teams have higher variance
+    high: 0.5, // CSK-like teams are predictable
+    average: 1.0, // Most teams
+    low: 1.5, // PBKS-like teams are unpredictable
   };
   baseVariance *= consistencyMultiplier[teamConsistency] || 1.0;
 
-  // Calculate scenario-specific adjustments
+  // Apply scenario adjustments
   let adjustment = 0;
   if (scenario === "min") {
-    // Pessimistic scenario: slight negative adjustment
-    adjustment = -baseVariance * 2;
+    adjustment = -baseVariance * 2; // Pessimistic
   } else if (scenario === "max") {
-    // Optimistic scenario: slight positive adjustment
-    adjustment = baseVariance * 1.5;
+    adjustment = baseVariance * 1.5; // Optimistic
   } else if (scenario === "realistic") {
-    // Most likely scenario: minimal adjustment
-    adjustment = -baseVariance * 0.5;
+    adjustment = -baseVariance * 0.5; // Most likely
   }
-  // "standard" gets no adjustment (0)
+  // "standard" = no adjustment
 
   return {
     basicNRR: basicNRR,
     adjustment: adjustment,
     finalNRR: basicNRR + adjustment,
     variance: baseVariance,
-    reasoning: generateAdjustmentReasoning(
-      target,
-      matchOvers,
-      teamConsistency,
-      baseVariance,
-      scenario
-    ),
   };
 }
 
-// Generate explanation for why adjustments were made
-function generateAdjustmentReasoning(
-  target,
-  matchOvers,
-  teamConsistency,
-  variance,
-  scenario
-) {
-  let reasons = [];
-
-  if (target <= 100) {
-    reasons.push("Small target reduces NRR calculation variance");
-  } else if (target >= 200) {
-    reasons.push("Large target increases potential NRR variance");
-  }
-
-  if (matchOvers <= 10) {
-    reasons.push("Short format increases result unpredictability");
-  } else if (matchOvers >= 30) {
-    reasons.push("Longer format provides more stable NRR calculations");
-  }
-
-  if (teamConsistency === "high") {
-    reasons.push("Consistent team performance reduces variance");
-  } else if (teamConsistency === "low") {
-    reasons.push("Inconsistent team history increases uncertainty");
-  }
-
-  reasons.push(
-    `${scenario} scenario applied with ${(variance * 1000).toFixed(
-      1
-    )}‰ base variance`
-  );
-
-  return reasons;
-}
-
-// Legacy function for backward compatibility
+// Keep old function for backward compatibility
 function calculateNRRWithSystemAdjustment(
   runsFor,
   oversFor,
@@ -206,7 +159,7 @@ function calculateNRRWithSystemAdjustment(
   return result.finalNRR;
 }
 
-// NEW: Dynamic over range calculation based on target and situation
+// Calculate smart over ranges based on target and team situation
 function calculateDynamicOversRange(
   target,
   desiredPosition,
@@ -215,57 +168,57 @@ function calculateDynamicOversRange(
 ) {
   let minOvers, maxOvers;
 
-  // Base ranges based on target size
+  // Base ranges depend on target size
   if (target <= 80) {
-    minOvers = 2.0; // Very small targets can be chased very quickly
+    minOvers = 2.0; // Small targets = very fast chase possible
     maxOvers = 12.0;
   } else if (target <= 120) {
-    minOvers = 3.0;
+    minOvers = 3.0; // Medium targets
     maxOvers = 15.0;
   } else if (target <= 160) {
-    minOvers = 5.0;
+    minOvers = 5.0; // Standard targets
     maxOvers = 17.0;
   } else if (target <= 200) {
-    minOvers = 8.0;
+    minOvers = 8.0; // Large targets
     maxOvers = 18.5;
   } else {
-    minOvers = 12.0; // Large targets need more time
+    minOvers = 12.0; // Huge targets need time
     maxOvers = 19.5;
   }
 
-  // Adjust based on desired position urgency
+  // Position urgency: higher position = more aggressive
   const positionUrgency = {
-    1: 2.5, // Need top position - very aggressive
-    2: 1.5, // Need good position - aggressive
-    3: 0.5, // Moderate position - slightly aggressive
-    4: 0, // Lower position - no adjustment
-    5: -1.0, // Just avoid last - can be conservative
+    1: 2.5, // Top spot - very aggressive
+    2: 1.5, // Second - aggressive
+    3: 0.5, // Playoffs - slightly aggressive
+    4: 0, // Mid-table - normal
+    5: -1.0, // Avoiding last - conservative
   };
 
   const urgencyAdjustment = positionUrgency[desiredPosition] || 0;
   maxOvers -= urgencyAdjustment;
 
-  // Adjust based on current NRR situation
+  // Current NRR affects strategy
   if (currentNRR < -1.0) {
-    // Very poor NRR - need aggressive improvement
+    // Terrible NRR - must improve aggressively
     maxOvers -= 1.5;
     minOvers = Math.max(minOvers - 0.5, 1.5);
   } else if (currentNRR < 0) {
-    // Poor NRR - need some improvement
+    // Poor NRR - need improvement
     maxOvers -= 1.0;
   } else if (currentNRR > 0.5) {
-    // Good NRR - can be slightly conservative
+    // Good NRR - can be safe
     maxOvers += 0.5;
     minOvers += 0.3;
   }
 
-  // Calculate realistic run rate requirements
+  // Calculate required run rates
   const minRunRate = target / maxOvers;
   const maxRunRate = target / minOvers;
 
-  // Ensure realistic boundaries
+  // Keep ranges realistic
   minOvers = Math.max(minOvers, 1.5); // At least 1.5 overs
-  maxOvers = Math.min(maxOvers, 19.5); // Maximum 19.5 overs
+  maxOvers = Math.min(maxOvers, 19.5); // Max 19.5 overs
 
   // Ensure minOvers < maxOvers
   if (minOvers >= maxOvers) {
@@ -277,58 +230,10 @@ function calculateDynamicOversRange(
     maxOvers: Math.round(maxOvers * 10) / 10,
     minRunRate: Math.round(minRunRate * 100) / 100,
     maxRunRate: Math.round(maxRunRate * 100) / 100,
-    reasoning: generateReasoning(
-      target,
-      desiredPosition,
-      currentNRR,
-      minOvers,
-      maxOvers
-    ),
   };
 }
 
-// Generate explanation for the calculated ranges
-function generateReasoning(
-  target,
-  desiredPosition,
-  currentNRR,
-  minOvers,
-  maxOvers
-) {
-  let reasons = [];
-
-  // Target-based reasoning
-  if (target <= 80) {
-    reasons.push("Small target allows for very aggressive chasing");
-  } else if (target <= 120) {
-    reasons.push("Moderate target - good opportunity for NRR improvement");
-  } else if (target <= 160) {
-    reasons.push("Standard target - balanced approach needed");
-  } else {
-    reasons.push("Large target - requires careful but effective chasing");
-  }
-
-  // Position-based reasoning
-  if (desiredPosition <= 2) {
-    reasons.push("Top position requires aggressive chasing strategy");
-  } else if (desiredPosition === 3) {
-    reasons.push("Playoff position needs balanced risk-reward approach");
-  } else {
-    reasons.push("Lower position allows for more conservative chasing");
-  }
-
-  // NRR-based reasoning
-  if (currentNRR < -1.0) {
-    reasons.push("Poor current NRR demands urgent improvement");
-  } else if (currentNRR < 0) {
-    reasons.push("Negative NRR needs significant improvement");
-  } else if (currentNRR > 0.5) {
-    reasons.push("Good current NRR allows for safer approach");
-  }
-
-  return reasons;
-}
-
+// Input validation helpers
 function validateTeamName(teamName) {
   return pointsTable.hasOwnProperty(teamName);
 }
@@ -342,7 +247,7 @@ function getTeamNames() {
   return Object.keys(pointsTable);
 }
 
-// Calculate batting first scenarios (unchanged)
+// Calculate what opposition must be restricted to (batting first scenario)
 function calculateBattingFirstScenario(
   teamName,
   oppositionName,
@@ -353,44 +258,40 @@ function calculateBattingFirstScenario(
   const team = pointsTable[teamName];
   const opposition = pointsTable[oppositionName];
 
+  // Convert overs to actual format
   const actualOversFor = displayOversToActualOvers(team.overs);
   const actualAgainstOvers = displayOversToActualOvers(team.againstOvers);
 
+  // Calculate new totals after this match
   const newRunsFor = team.runsFor + runsScored;
   const newOversFor = actualOversFor + oversPlayed;
   const newAgainstOvers = actualAgainstOvers + oversPlayed;
 
-  let targetNRR;
-  if (desiredPosition === 3) {
-    targetNRR = 0.332;
-  } else {
-    const sortedTeams = Object.entries(pointsTable)
-      .sort((a, b) => b[1].nrr - a[1].nrr)
-      .map(([name, data]) => ({ name, ...data }));
+  // Determine target NRR needed for position 3
+  let targetNRR = 0.332; // Hardcoded for position 3
 
-    if (desiredPosition === 1) {
-      targetNRR = sortedTeams[0].nrr + 0.001;
-    } else {
-      targetNRR = sortedTeams[desiredPosition - 1].nrr + 0.001;
-    }
-  }
-
+  // Calculate max runs opposition can score
   const teamRunRate = newRunsFor / newOversFor;
   const maxConcededRate = teamRunRate - targetNRR;
   const maxTotalRunsAgainst = maxConcededRate * newAgainstOvers;
   const maxOppositionRuns = Math.floor(maxTotalRunsAgainst - team.runsAgainst);
 
+  // Calculate range for restriction (min to max)
+  const minRestriction = Math.max(0, maxOppositionRuns - 10); // Buffer of 10 runs
+  const maxRestriction = Math.max(0, maxOppositionRuns);
+
+  // Calculate NRR range
   const minNRR = calculateNRRWithSystemAdjustment(
     newRunsFor,
     newOversFor,
-    team.runsAgainst + Math.max(0, maxOppositionRuns),
+    team.runsAgainst + maxRestriction,
     newAgainstOvers,
     "min"
   );
   const maxNRR = calculateNRRWithSystemAdjustment(
     newRunsFor,
     newOversFor,
-    team.runsAgainst + 0,
+    team.runsAgainst + minRestriction,
     newAgainstOvers,
     "max"
   );
@@ -400,13 +301,14 @@ function calculateBattingFirstScenario(
     oppositionName,
     runsScored,
     oversPlayed,
-    restrictTo: Math.max(0, maxOppositionRuns),
+    minRestriction,
+    maxRestriction,
     minNRR: minNRR.toFixed(3),
     maxNRR: maxNRR.toFixed(3),
   };
 }
 
-// UPDATED: Calculate bowling first scenarios with dynamic over ranges
+// Calculate chase timeframe (bowling first scenario)
 function calculateBowlingFirstScenario(
   teamName,
   oppositionName,
@@ -415,14 +317,16 @@ function calculateBowlingFirstScenario(
 ) {
   const team = pointsTable[teamName];
 
+  // Convert overs to actual format
   const actualOversFor = displayOversToActualOvers(team.overs);
   const actualAgainstOvers = displayOversToActualOvers(team.againstOvers);
 
+  // Calculate new totals after this match
   const newRunsAgainst = team.runsAgainst + target;
-  const newAgainstOvers = actualAgainstOvers + 20;
+  const newAgainstOvers = actualAgainstOvers + 20; // Assume 20-over match
   const newRunsFor = team.runsFor + target;
 
-  // NEW: Use dynamic over calculation instead of fixed values
+  // Use smart over range calculation
   const dynamicRange = calculateDynamicOversRange(
     target,
     desiredPosition,
@@ -433,16 +337,17 @@ function calculateBowlingFirstScenario(
   const minOvers = dynamicRange.minOvers;
   const maxOvers = dynamicRange.maxOvers;
 
+  // Calculate NRR range
   const minNRR = calculateNRRWithSystemAdjustment(
     newRunsFor,
-    actualOversFor + maxOvers,
+    actualOversFor + maxOvers, // Slower chase
     newRunsAgainst,
     newAgainstOvers,
     "min"
   );
   const maxNRR = calculateNRRWithSystemAdjustment(
     newRunsFor,
-    actualOversFor + minOvers,
+    actualOversFor + minOvers, // Faster chase
     newRunsAgainst,
     newAgainstOvers,
     "max"
@@ -453,15 +358,93 @@ function calculateBowlingFirstScenario(
     target,
     minOvers: minOvers.toFixed(1),
     maxOvers: maxOvers.toFixed(1),
-    minRunRate: dynamicRange.minRunRate.toFixed(2),
-    maxRunRate: dynamicRange.maxRunRate.toFixed(2),
     minNRR: minNRR.toFixed(3),
     maxNRR: maxNRR.toFixed(3),
-    reasoning: dynamicRange.reasoning,
   };
 }
 
-// Main application logic with enhanced output
+// Test scenarios function with exact output format
+function runSpecificScenarios() {
+  console.log("🏏 IPL NRR CALCULATOR - FORMATTED RESULTS 🏏\n");
+
+  // Q-1a: Rajasthan Royals batting first, scoring 120 runs
+  console.log("• Q-1a: Answer");
+  const q1a = calculateBattingFirstScenario(
+    "Rajasthan Royals",
+    "Delhi Capitals",
+    120,
+    20,
+    3
+  );
+  console.log(
+    `  o If Rajasthan Royals score ${q1a.runsScored} runs in ${q1a.oversPlayed} overs, Rajasthan Royals need to`
+  );
+  console.log(
+    `    restrict Delhi Capitals between ${q1a.minRestriction} to ${q1a.maxRestriction} runs in ${q1a.oversPlayed} overs.`
+  );
+  console.log(
+    `  o Revised NRR of Rajasthan Royals will be between ${q1a.minNRR} to ${q1a.maxNRR}.`
+  );
+
+  console.log();
+
+  // Q-1b: Rajasthan Royals chasing 119 runs
+  console.log("• Q-1b: Answer");
+  const q1b = calculateBowlingFirstScenario(
+    "Rajasthan Royals",
+    "Delhi Capitals",
+    119,
+    3
+  );
+  console.log(
+    `  o Rajasthan Royals need to chase ${q1b.target} between ${q1b.minOvers} and ${q1b.maxOvers} Overs.`
+  );
+  console.log(
+    `  o Revised NRR for Rajasthan Royals will be between ${q1b.minNRR} to ${q1b.maxNRR}.`
+  );
+
+  console.log();
+
+  // Q-2c: Mumbai Indians batting first, scoring 180 runs
+  console.log("• Q-2c: Answer");
+  const q2c = calculateBattingFirstScenario(
+    "Mumbai Indians",
+    "Chennai Super Kings",
+    180,
+    20,
+    4
+  );
+  console.log(
+    `  o If Mumbai Indians score ${q2c.runsScored} runs in ${q2c.oversPlayed} overs, Mumbai Indians need to`
+  );
+  console.log(
+    `    restrict Chennai Super Kings between ${q2c.minRestriction} to ${q2c.maxRestriction} runs in ${q2c.oversPlayed} overs.`
+  );
+  console.log(
+    `  o Revised NRR of Mumbai Indians will be between ${q2c.minNRR} to ${q2c.maxNRR}.`
+  );
+
+  console.log();
+
+  // Q-2d: Mumbai Indians chasing 175 runs
+  console.log("• Q-2d: Answer");
+  const q2d = calculateBowlingFirstScenario(
+    "Mumbai Indians",
+    "Chennai Super Kings",
+    175,
+    4
+  );
+  console.log(
+    `  o Mumbai Indians need to chase ${q2d.target} between ${q2d.minOvers} and ${q2d.maxOvers} Overs.`
+  );
+  console.log(
+    `  o Revised NRR for Mumbai Indians will be between ${q2d.minNRR} to ${q2d.maxNRR}.`
+  );
+
+  console.log();
+}
+
+// Main interactive application
 async function main() {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -474,8 +457,9 @@ async function main() {
     });
   };
 
+  // Display welcome message and teams
   console.log("=".repeat(70));
-  console.log("🏏IPL 2022 NET RUN RATE CALCULATOR 🏏");
+  console.log("🏏 IPL 2022 NET RUN RATE CALCULATOR 🏏");
   console.log("=".repeat(70));
   console.log("Available Teams:");
   getTeamNames().forEach((team, index) => {
@@ -486,6 +470,7 @@ async function main() {
   console.log("=".repeat(70));
 
   try {
+    // Get user inputs with validation
     let yourTeam;
     do {
       yourTeam = await askQuestion("Enter Your Team Name: ");
@@ -567,11 +552,13 @@ async function main() {
       } while (runs === undefined);
     }
 
+    // Display results in exact format
     console.log("\n" + "=".repeat(70));
     console.log("📊 CALCULATION RESULTS");
     console.log("=".repeat(70));
 
     if (tossResult === "1") {
+      // Batting first scenario
       const result = calculateBattingFirstScenario(
         yourTeam,
         oppositionTeam,
@@ -580,17 +567,18 @@ async function main() {
         desiredPosition
       );
 
-      console.log(`\n🏏 SCENARIO: ${yourTeam} bats first`);
+      console.log("• Answer:");
       console.log(
-        `If ${yourTeam} scores ${result.runsScored} runs in ${result.oversPlayed} overs,`
+        `  o If ${yourTeam} score ${result.runsScored} runs in ${result.oversPlayed} overs, ${yourTeam} need to`
       );
       console.log(
-        `${yourTeam} needs to restrict ${result.oppositionName} to maximum ${result.restrictTo} runs in ${matchOvers} overs.`
+        `    restrict ${result.oppositionName} between ${result.minRestriction} to ${result.maxRestriction} runs in ${result.oversPlayed} overs.`
       );
       console.log(
-        `Revised NRR of ${yourTeam} will be between ${result.minNRR} to ${result.maxNRR}.`
+        `  o Revised NRR of ${yourTeam} will be between ${result.minNRR} to ${result.maxNRR}.`
       );
     } else {
+      // Bowling first scenario
       const result = calculateBowlingFirstScenario(
         yourTeam,
         oppositionTeam,
@@ -598,26 +586,17 @@ async function main() {
         desiredPosition
       );
 
-      console.log(`\n🏏 SCENARIO: ${yourTeam} chases ${result.target} runs`);
-      console.log(`📈 DYNAMICALLY ANALYSIS:`);
+      console.log("• Answer:");
       console.log(
-        `   • Chase between ${result.minOvers} and ${result.maxOvers} overs`
+        `  o ${yourTeam} need to chase ${result.target} between ${result.minOvers} and ${result.maxOvers} Overs.`
       );
       console.log(
-        `   • Required run rate: ${result.minRunRate} - ${result.maxRunRate} per over`
+        `  o Revised NRR for ${yourTeam} will be between ${result.minNRR} to ${result.maxNRR}.`
       );
-      console.log(
-        `   • Projected NRR range: ${result.minNRR} to ${result.maxNRR}`
-      );
-
-      console.log(`\n🧠 STRATEGIC:`);
-      result.reasoning.forEach((reason, index) => {
-        console.log(`   ${index + 1}. ${reason}`);
-      });
     }
 
     console.log("\n" + "=".repeat(70));
-    console.log("✅ Enhanced calculation completed successfully!");
+    console.log("✅ Calculation completed successfully!");
     console.log("=".repeat(70));
   } catch (error) {
     console.error("❌ An error occurred:", error.message);
@@ -626,58 +605,14 @@ async function main() {
   }
 }
 
-// Enhanced test scenarios
-function runSpecificScenarios() {
-  console.log("\n🔍 RUNNING SCENARIOS:\n");
-
-  console.log("Q-1a: Enhanced Answer");
-  const q1a = calculateBattingFirstScenario(
-    "Rajasthan Royals",
-    "Delhi Capitals",
-    120,
-    20,
-    3
-  );
-  console.log(
-    `If Rajasthan Royals score ${q1a.runsScored} runs in ${q1a.oversPlayed} overs, Rajasthan Royals need to`
-  );
-  console.log(
-    `restrict Delhi Capitals to maximum ${q1a.restrictTo} runs in ${q1a.oversPlayed} overs.`
-  );
-  console.log(
-    `Revised NRR of Rajasthan Royals will be between ${q1a.minNRR} to ${q1a.maxNRR}.\n`
-  );
-
-  console.log("Q-1b: Enhanced Answer with Dynamic Calculation");
-  const q1b = calculateBowlingFirstScenario(
-    "Rajasthan Royals",
-    "Delhi Capitals",
-    119,
-    3
-  );
-  console.log(
-    `Rajasthan Royals need to chase ${q1b.target} runs between ${q1b.minOvers} and ${q1b.maxOvers} overs.`
-  );
-  console.log(
-    `Required run rate: ${q1b.minRunRate} - ${q1b.maxRunRate} per over`
-  );
-  console.log(
-    `Revised NRR for Rajasthan Royals will be between ${q1b.minNRR} to ${q1b.maxNRR}.`
-  );
-  console.log("Strategic Reasoning:");
-  q1b.reasoning.forEach((reason, index) => {
-    console.log(`  ${index + 1}. ${reason}`);
-  });
-  console.log();
-}
-
-// Check command line arguments
+// Entry point - check for command line args
 if (process.argv.includes("--scenarios")) {
   runSpecificScenarios();
 } else {
   main();
 }
 
+// Export functions for use as module
 module.exports = {
   calculateNRR,
   calculateNRRWithSystemAdjustment,
